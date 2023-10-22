@@ -1,0 +1,143 @@
+---
+title: "JiayiShi_js6177_p8158hw5"
+author: "Jiayi Shi"
+date: "2023-03-07"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+library(lcmm)
+library(tidyverse)
+```
+
+## Problem 1
+
+1. 
+colnames(data) = c('y1','y2','y3')
+
+data = data %>% mutate(ID = row_number())
+
+data_long = gather(data, index, y, y1:y3, factor_key = T) %>% arrange(ID) %>% 
+  mutate(time = case_when(index=='y1'~ 0,
+                          index=='y2'~ 1,
+                          index=='y3'~ 2
+                          ))
+                          
+set.seed(12345)
+
+gmm1 <- hlme(y ~ time, subject = 'ID', random= ~ 1 + time, ng = 1, data=data_long)
+
+gmm4 <- hlme(y ~ time, subject = 'ID', random= ~ 1 + time, ng = 4, data=data_long, mixture=~time, B=random(gmm1))
+
+2. The five-class model was unparsimonious and unviable because it split one class into two parallel classes, creating a very small class (1.6%), and failed to converge when covariates were included in the model.
+
+3. The slope for the low-stable group was 1.64 and significant due to the group's large size (83.1%) and small standard error (0.14); the slope for the high-stable group was -5.07 and non-significant due to the group's small size (2.2%) and large standard error (5.5).
+
+4. For multiple deployers in the moderate-improving class, the adjusted odds of screening positive for heavy drinking is 2.03 times that of screening negative for heavy drinking, with 95% CI: (1.41, 2.94).
+
+
+
+## Problem 2
+
+1. Fit a linear growth curve model with a random intercept and slope.
+
+```{r}
+data = read.csv("data/hamd.csv", header = F)
+colnames(data) = c('id','baseline','week1','week2','week3','week4','week6')
+
+data_long = data %>% 
+  pivot_longer(
+  baseline:week6,
+  values_to = "HamD",
+  names_to = "time"
+) %>% 
+  mutate(
+    time = case_when(time=='baseline'~ 0,
+                          time=='week1'~ 1,
+                          time=='week2'~ 2,
+                          time=='week3'~ 3,
+                          time=='week4'~ 4,
+                          time=='week6'~ 6
+                          )) %>% 
+   mutate_if(is.character, as.numeric)
+```
+
+```{r}
+library(nlme)
+gmm = lme(HamD ~ time, random =~ time|id, data=data_long, method="ML", na.action = na.exclude)
+summary(gmm)
+```
+
+The overall estimated intercept is 19.39476 and slope is -1.80701. They are both statistically significant with p-value = 0.
+
+```{r}
+data_long %>% 
+  ggplot(aes(x = time, y = HamD, group = id)) +
+  geom_line(linetype = "dashed") +
+  geom_point()+
+  geom_abline(slope = -1.80701, intercept = 19.39476, size = 1.5) +
+  theme_classic()
+```
+
+2. 95% CI of slope is (-1.890082, -1.723941).
+```{r}
+intervals(gmm)
+```
+
+A plot of the fitted Ham-D scores for 20 individuals:
+```{r}
+data_long %>% filter(id<1021) %>%
+  mutate(y = fitted(gmm)[1:102]) %>% 
+  ggplot(aes(x = time, y = y, group = id)) +
+  geom_line(linetype = "dashed") +
+  geom_point()+
+  theme_classic()
+```
+
+3. Fit a linear growth curve mixture model with K=2:
+
+```{r}
+set.seed(12345)
+gmm1 <- hlme(HamD ~ time, subject = 'id', random= ~ 1 + time, ng = 1, data=data_long)
+
+gmm2 = hlme(HamD ~ time, subject = 'id', random= ~ 1 + time, ng = 2, data=data_long, mixture=~time, B=random(gmm1))
+
+summary(gmm2)
+```
+
+Fit a linear growth curve mixture model with K=3:
+
+```{r}
+set.seed(12345)
+            
+gmm3 = hlme(HamD ~ time, subject = 'id', random= ~ 1 + time, ng = 3, data=data_long, mixture=~time, B=random(gmm1))
+summary(gmm3)
+```
+
+```{r}
+# K=2
+tibble(
+  class = c(1,2),
+  proportion = c(summarytable(gmm2, which = "%class")[1],summarytable(gmm2, which = "%class")[2]),
+  intercept = c(coef(gmm2)[2:3]),
+  slope = c(coef(gmm2)[4:5])
+) %>% knitr::kable()
+
+# K=3
+tibble(
+  class = c(1,2,3),
+  proportion = c(summarytable(gmm3, which = "%class")[1],summarytable(gmm3, which = "%class")[2],summarytable(gmm3, which = "%class")[3]),
+  intercept = c(coef(gmm3)[3:5]),
+  slope = c(coef(gmm3)[6:8])
+) %>% knitr::kable()
+```
+
+```{r}
+summarytable(gmm2)
+summarytable(gmm3)
+```
+
+2-class model: positive intercepts and negative slopes for both classes.
+3-class model: split one class into two classes with negative intercepts, creating a relatively small class (7.2%). One class has negative slopes while the other two classes have negative slopes.
+
+Model "K=2" is better than "K=3" with lower BIC and fewer parameters (parsimonious).

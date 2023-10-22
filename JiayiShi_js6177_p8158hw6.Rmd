@@ -1,0 +1,167 @@
+---
+title: "JiayiShi_js6177_p8158hw6"
+author: "Jiayi Shi"
+date: "2023-03-26"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Problem 1
+
+a. 0.56 is the correlations between improvement in Negative Symptoms (SANS Ratings) and positive symptoms for patients given Olanzapine, Haloperidol, or Placebo.
+0.31 is the correlations between improvement in Negative Symptoms (SANS Ratings) and depressive symptoms for patients given Olanzapine, Haloperidol, or Placebo.
+0.13 is the correlations between improvement in Negative Symptoms (SANS Ratings) and extrapyramidal symptoms for patients given Olanzapine, Haloperidol, or Placebo.
+
+b. ![](hw6.png)
+linear regression. P, D, E represent change in positive, depressive, and extrapyramidal symptoms respectively. In figure 2, X represents high-dose olanzapine versus placebo and Y represents total differential treatment effect on negative symptoms. In figure 4, X represents high-dose olanzapine versus haloperidol and Y represents total differential treatment effect on negative symptoms. 
+
+c. The treatment effect denotes the additional change in scores of olanzapine-treated subjects relative to that of subjects who received either placebo or haloperidol. The \textbf{total treatment effect} on negative
+symptoms is the sum of both the direct effect and the indirect effects.
+
+For high-dose versus placebo:   
+total effect: $1.52+1.91+0.17-0.10=3.5$;   
+direct effect: $1.91/3.5*100\%=55\%$  
+indirect effect through positive symptoms: $1.52/3.5*100%=43%$  
+indirect effect through depressive symptoms: $0.17/3.5*100%=5%$  
+indirect effect through extrapyramidal symptoms: $-0.1/3.5*100%=-3%$   
+
+For high-dose olanzapine versus haloperidol:  
+total effect: $0.05+1.92+0.02+0.29=2.28$;  
+direct effect: $1.92/2.28*100\%=84\%$  
+indirect effect through positive symptoms: $0.05/2.28*100%=2%$  
+indirect effect through depressive symptoms: $0.02/2.28*100%=1%$  
+indirect effect through extrapyramidal symptoms: $0.29/2.28*100%=13%$   
+
+d. Compared to placebo, the high-dose olanzapine makes positive symptoms lower by 2.98 points in BPRS positive symptom subscale score, makes depressive symptoms lower by 0.49 points in BPRS item 9 (depressive mood) score, and makes extrapyramidal symptoms higher by 0.25 points in SimpsonAngus scale total score.
+
+## Problem 2
+
+```{r}
+pacman::p_load(tidyverse, janitor, lavaan,semPlot)
+lvsem_sem <- read_csv("data/SEM for uwcb.csv") %>%
+  clean_names() 
+```
+
+```{r}
+model_fig1 <- '
+  # measurement model
+    outuwcb =~ diet_yr + uwcb_yr
+    wtteas =~ teasewt + fam_wt
+ 
+  # correlating the exogenous variables
+    wtteas ~~ bmi_sf
+    
+  # structural model - direct effects
+    bodydiss ~ a*bmi_sf + b*wtteas
+    outuwcb ~ c*bmi_sf + d*wtteas + e*bodydiss
+    
+  #indirect
+    indirect_bmi := a*e
+    indirect_wtteas := b*e
+    
+  #total
+    total_bmi := c+(a*e)
+    total_wtteas := d+(b*e)
+'
+
+model.fit <- sem(model_fig1, data = lvsem_sem, sample.cov=TRUE, missing = "ML")
+
+summary(model.fit, standardized = TRUE, fit.measures=TRUE)
+
+semPaths(model.fit,intercept = FALSE, whatLabels="std", reorder = FALSE,
+         rainbow = .5, groups = "latents",rotation = 2,layout = "tree")
+```
+
+
+|                   | direct effect | indirect effect | total effect |
+|-------------------|---------------|-----------------|--------------|
+| wtteas to outuwcb | 0.309         | -0.003          | 0.306        |
+| bmi_sf to outuwcb | 0.132         | 0.049           | 0.181        |
+
+Goodness of fit statistics:  
+Chi-square=118.927, d.f.=5, RMSEA=0.069, CFI=0.974  
+
+```{r}
+model_fig1_mod <- '
+  # measurement model
+    outuwcb =~ diet_yr + uwcb_yr
+    wtteas =~ teasewt + fam_wt
+    
+  # structural model - direct effects
+    bodydiss ~ a*bmi_sf + b*wtteas
+    outuwcb ~ c*bmi_sf + d*wtteas + e*bodydiss
+    wtteas ~ f*bmi_sf
+    
+  #indirect
+    indirect_bmi := a*e + f*b*e + f*d
+    indirect_wtteas := b*e
+    
+  #total
+    total_bmi := c + (a*e + f*b*e + f*d)
+    total_wtteas := d + (b*e)
+'
+
+model.fit2 <- sem(model_fig1_mod, data = lvsem_sem, sample.cov=TRUE, missing = "ML", fixed.x=FALSE)
+
+summary(model.fit2, standardized = TRUE, fit.measures=TRUE)
+
+semPaths(model.fit2,intercept = FALSE, whatLabels="std", reorder = FALSE,
+         rainbow = .5, groups = "latents",rotation = 2,layout = "tree")
+```
+
+|                   | direct effect | indirect effect | total effect |
+|-------------------|---------------|-----------------|--------------|
+| wtteas to outuwcb | 0.309         | -0.003          | 0.306        |
+| bmi_sf to outuwcb | 0.132         | 0.135           | 0.267        | 
+
+Goodness of fit statistics remain the same as in (a):  
+Chi-square=118.927, d.f.=5, RMSEA=0.069, CFI=0.974   
+
+
+c. 
+```{r}
+model_fig2 <- '
+  # structural model - direct effects   
+    teasewt ~ a*bmi_sf
+    bodydiss ~ b*bmi_sf + c*teasewt
+    uwcb_yr ~ d*bmi_sf + e*bodydiss + f*teasewt
+    diet_yr ~ g*bmi_sf + h*bodydiss + j*teasewt
+    
+  # indirect effects
+    ind_bm_uwcb := b*e+a*f+a*c*e
+    ind_bm_diet := b*h+a*j+a*c*h
+    ind_tease_uwcb := c*e
+    ind_tease_diet := c*h
+  
+  #total effects
+    tot_bm_uwcb := d+b*e+a*f+a*c*e
+    tot_bm_diet := g+b*h+a*j+a*c*h
+    tot_tease_uwcb := f+c*e
+    tot_tease_diet := j+c*h
+    
+'
+
+### The default is listwise deletion for missing data
+###adding the optoin missing = "ML" uses full information maximum likelihood
+model.fit3 <- sem(model_fig2, data = lvsem_sem, sample.cov=TRUE, missing = "ML", fixed.x=FALSE)
+
+summary(model.fit3, standardized = TRUE, fit.measures=TRUE)
+```
+
+|                   | direct effect | indirect effect | total effect |
+|-------------------|---------------|-----------------|--------------|
+| bmi_sf to uwcb_yr | 0.123         | 0.066           | 0.189        |
+| bmi_sf to diet_yr | 0.157         | 0.057           | 0.214        |
+| teaswt to uwcb_yr | 0.153         | 0.021           | 0.173        |
+| teaswt to diet_yr | 0.118         | 0.019           | 0.137        |  
+
+
+Goodness of fit statistics:  
+Chi-square=0, d.f.=0, RMSEA=0, CFI=1
+
+d. Similarity: Both models test causal effect of BMI and unhealthy weight control behaviors as well as causal effect of tease tendency and unhealthy weight control behaviors, viewing body satisfaction as a mediator. 
+Difference: Model in b considers latent variable. It considers tendency to tease of both friends and family, and consider diet and other specific behaviors as a whole. Model in c only considers tendency of friends to tease participants about their weights, and considers two outcomes separately. 
